@@ -1,0 +1,56 @@
+version: "3.7"
+
+services:
+  docker_example_webserver:
+    build:
+      context: .
+      dockerfile: ./Dockerfile_dagster
+    entrypoint:
+      - dagster-webserver
+      - -h
+      - "0.0.0.0"
+      - -p
+      - "3000"
+      - -f
+      - /opt/dagster/app/repo.py
+    container_name: docker_example_webserver
+    expose:
+      - "3000"
+    ports:
+      - "3000:3000"
+    environment:
+      container_name: docker_example_daemon
+      DAGSTER_CURRENT_IMAGE: "deploy_docker-docker_example_daemon"
+    volumes: # Make docker client accessible so we can terminate containers from the webserver
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/io_manager_storage:/tmp/io_manager_storage
+      - /tmp/DHOME:/opt/dagster/dagster_home
+    networks:
+      - docker_example_network
+
+  # This service runs the dagster-daemon process, which is responsible for taking runs
+  # off of the queue and launching them, as well as creating runs from schedules or sensors.
+  docker_example_daemon:
+    build:
+      context: .
+      dockerfile: ./Dockerfile_dagster
+    entrypoint:
+      - dagster-daemon
+      - run
+      - -f
+      - /opt/dagster/app/repo.py
+    container_name: docker_example_daemon
+    restart: on-failure
+    environment:
+      DAGSTER_CURRENT_IMAGE: "deploy_docker-docker_example_daemon"
+    volumes: # Make docker client accessible so we can launch containers using host docker
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/io_manager_storage:/tmp/io_manager_storage
+      - /tmp/DHOME:/opt/dagster/dagster_home
+    networks:
+      - docker_example_network
+
+networks:
+  docker_example_network:
+    driver: bridge
+    name: docker_example_network
