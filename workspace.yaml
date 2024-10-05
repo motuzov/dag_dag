@@ -1,2 +1,2 @@
 load_from:
-  - python_file: dag.py
+  - python_file: daily_etl/dag1.py
