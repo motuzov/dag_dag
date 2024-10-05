@@ -1,0 +1,19 @@
+FROM python:3.10-slim
+
+RUN pip install dagster dagster-webserver 
+RUN apt-get update && apt-get install -y sudo && apt install git-all -y
+
+RUN useradd -ms /bin/bash dag && \
+    usermod -aG sudo dag
+RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+
+RUN mkdir -p /home/dag/DAGSTER_HOME
+ENV DAGSTER_HOME=/home/dag/DAGSTER_HOME
+USER dag
+WORKDIR /home/dag
+COPY start-dev.sh /home/dag/start-dev.sh
+EXPOSE 3000
+
+ENTRYPOINT ["/bin/bash", "/home/dag/start-dev.sh"]
+CMD ["default args"]
