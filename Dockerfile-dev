@@ -9,6 +9,7 @@ RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 
 RUN mkdir -p /home/dag/DAGSTER_HOME
+RUN chown dag:dag /home/dag/DAGSTER_HOME
 ENV DAGSTER_HOME=/home/dag/DAGSTER_HOME
 USER dag
 WORKDIR /home/dag
