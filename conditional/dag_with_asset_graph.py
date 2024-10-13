@@ -1,5 +1,3 @@
-import random
-
 from dagster import (
     Out,
     Output,
@@ -11,20 +9,32 @@ from dagster import (
     define_asset_job,
     AssetSelection,
     Definitions,
+    Config,
+    RunConfig,
+    ExecuteInProcessResult,
 )
+
+from typing import List
+
+
+class BranchingConfiguration(Config):
+    condition: int
 
 
 @asset
-def start_asset(context: OpExecutionContext) -> int:
-    context.log.info("start!")
-    return 0
+def branching_configuration_asset(
+    context: OpExecutionContext, config: BranchingConfiguration
+) -> int:
+    default_branch = 1
+    if config.condition != 1:
+        default_branch = 2
+    context.log.info(f"active branch: {default_branch}")
+    return default_branch
 
 
 @op(out={"branch_1": Out(is_required=False), "branch_2": Out(is_required=False)})
-def branching_op(context: OpExecutionContext, zero):
-    context.log.info(zero)
-    num = random.randint(0, 1)
-    if num == 0:
+def branching_op(context: OpExecutionContext, branch):
+    if branch == 1:
         yield Output(1, "branch_1")
     else:
         yield Output(2, "branch_2")
@@ -43,29 +53,17 @@ def branch_2_op(context: OpExecutionContext, _input) -> int:
 
 
 @op
-def finish(context: OpExecutionContext, i) -> int:
-    context.log.info(i)
-    return 4
-
-
-@op
-def define(context: OpExecutionContext, i):
+def skip_non_active_baranch(context: OpExecutionContext, i: List[int]) -> int:
     context.log.info(i[0])
-    return i
+    return i[0]
 
 
-# @graph
-@graph_asset(ins={"start_asset": AssetIn("start_asset")})
-def branching_graph_asset(start_asset) -> int:
-    branch_1, branch_2 = branching_op(start_asset)
-    out1 = branch_1_op(branch_1)
-    out2 = branch_2_op(branch_2)
-    outs = []
-    for o in [out1, out2]:
-        outs.append(o)
-    m = define(outs)
-    t = finish(m)
-    return t
+@graph_asset(
+    ins={"branching_configuration_asset": AssetIn("branching_configuration_asset")}
+)
+def branching_graph_asset(branching_configuration_asset) -> int:
+    branch_1, branch_2 = branching_op(branching_configuration_asset)
+    return skip_non_active_baranch([branch_1_op(branch_1), branch_2_op(branch_2)])
 
 
 @asset(ins={"branching_graph_asset": AssetIn("branching_graph_asset")})
@@ -79,17 +77,18 @@ assets_job = define_asset_job(
 )
 
 defs = Definitions(
-    assets=[branching_graph_asset, start_asset, end_asset],
+    assets=[branching_graph_asset, branching_configuration_asset, end_asset],
     jobs=[assets_job],
 )
 
 
-def main():
-    res = defs.get_job_def(
-        "assets_job_with_conditional_branch_ops"
-    ).execute_in_process()
-    print(res.run_id)
-
-
 if __name__ == "__main__":
-    main()
+    res: ExecuteInProcessResult = defs.get_job_def(
+        "assets_job_with_conditional_branch_ops"
+    ).execute_in_process(
+        run_config=RunConfig(
+            {"branching_configuration_asset": BranchingConfiguration(condition=2)}
+        )
+    )
+    print(res.run_id)
+    print(res.output_for_node("end_asset"))
